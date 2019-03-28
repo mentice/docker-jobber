@@ -2,7 +2,7 @@ Docker Jobber
 ==============================
 > *Twas buildy in the softly woves did gen and gitter in the web...*
 
-Docker Jobber (`djobber`) is a command line interface (CLI) application for managing machine learning workflows using Docker.
+Docker Jobber (`jobber`) is a command line interface (CLI) application for managing machine learning workflows using Docker.
 
 ![workflow](./docs/images/workflow.png)
 
@@ -55,21 +55,21 @@ Additional [TODO](meta data) is written linking the result image to the code and
 This provides the complete provenance for each job enabling reproducible results.
 
 # Installation
-You'll need [Docker](www.docker.com/get-started) of course, then just install using pip (Docker Jobber requires Python3):
+You'll need [Docker](www.docker.com/get-started) of course, then just install the `jobber` command using pip (Docker Jobber requires Python3):
 
 ```
-pip install djobber
+pip install docker-jobber
 ```
 
 
 # Usage
 Using Docker Jobber is very similar to just using Docker by itself:
 * You write instructions for constructing Docker images in Dockerfiles
-* You build Docker images with the build command (e.g. `djobber build`)
-* You execute jobs with the run command (e.g. `djobber run`)
+* You build Docker images with the build command (e.g. `jobber build`)
+* You execute jobs with the run command (e.g. `jobber run`)
   
 > Note: `docker run` starts a container that will continue to exist on the Docker host even after the container exits, 
-`djobber run` instead snapshots the file system and then deletes the container at exit. 
+`jobber run` instead snapshots the file system and then deletes the container at exit. 
 The file system snapshot is saved as the *result image* for the run.
 
 
@@ -78,7 +78,7 @@ The file system snapshot is saved as the *result image* for the run.
 ### <a name="CommandLineArguments"></a> Command Line Arguments
 
 ```sh
-djobber [GLOBAL-OPTIONS] [build|run] [COMMAND-OPTIONS] [ARG]
+jobber [GLOBAL-OPTIONS] [build|run] [COMMAND-OPTIONS] [ARG]
 ```
 #### <a name="GlobalOptions"></a> Global Options 
 |option|multiple|description|
@@ -101,16 +101,16 @@ Images are automatically pulled from or pushed to the default registry.
 Build a Docker image from a Dockerfile.
 The current directory name will be used as the image name if no tags are specified.
 Tags consist of an *image-name* optionally followed by a colon (:) and a *tag-name*.
-`djobber` will add two default tags to the image name if a tag name isn't specified: 'latest', and a UTC timestamp with format 'YYYMMDD_HHMMSS'. Meta-data in the form of Docker LABELS are also written to the image:
+`jobber` will add two default tags to the image name if a tag name isn't specified: 'latest', and a UTC timestamp with format 'YYYMMDD_HHMMSS'. Meta-data in the form of Docker LABELS are also written to the image:
 
 | label | description |
 |--|--|
-|djobber.version| The version of djobber that created the image |
-|djobber.build-tags| List of tags set for the image |
+|jobber.version| The version of Docker Jobber that created the image |
+|jobber.build-tags| List of tags set for the image |
 
 #### Run Command
 ```
-djobber run [OPTIONS] [IMAGE[:TAG]] [ARGS...]
+jobber run [OPTIONS] [IMAGE[:TAG]] [ARGS...]
 ```
 
 |option|multiple|description|
@@ -124,18 +124,15 @@ djobber run [OPTIONS] [IMAGE[:TAG]] [ARGS...]
 Run a docker image and create a result image from a snapshot of the filesystem at exit.
 The current directory name will be used as the name of the image to run if not specified.
 Any additional arguments appearing after the image name are passed as the docker CMD.
-`djobber` adds two tags to the result image name: 'latest-run', and a UTC timestamp with format 'YYYMMDD_HHMMSS'.
+`jobber` adds two tags to the result image name: 'latest-run', and a UTC timestamp with format 'YYYMMDD_HHMMSS'.
 Meta-data in the form of Docker LABELS are also written to the result image:
 
 | label | description |
 |--|--|
-|djobber.version| The version of djobber that created the image |
-|djobber.parent| The sha256 id of the image that was run |
-|djobber.out| The default *src* directory when image used as an input (see the `-o` option below)
-|djobber.inputs| Comma separated list of input vol-specs. A vol-spec is a string with format: "*image-id*:*src-directory*:ro".
-
-
-jobber.parent
+|jobber.version| The version of Docker Jobber that created the image |
+|jobber.parent| The sha256 id of the image that was run |
+|jobber.out| The default *src* directory when image used as an input (see the `-o` option below)
+|jobber.inputs| Comma separated list of input vol-specs. A vol-spec is a string with format: "*image-id*:*src-directory*:ro".
 
 The out (`-o`) option specifies the default *src* directory when the result image is used as an input image to a later run (default is `/data`).
 
@@ -157,7 +154,7 @@ Use the various `docker volume` commands to view and clean up unused volumes.
 
 
 # <a name="ConfigurationFiles"></a> Configuration Files
-Docker Jobber is configured using a flexible architecture based on yml files with the name `djobber-config.yml` (see [example](#example) below).
+Docker Jobber is configured using a flexible architecture based on yml files with the name `jobber-config.yml` (see [example](#example) below).
 
 ## Settings
 Settings from configuration files define default values for unspecified command line options and internal settings.
@@ -176,9 +173,9 @@ Settings from configuration files define default values for unspecified command 
 |configs| list of *configuration names*| Define named configurations (see [below](#NamedConfigurations))
 
 ## Directory Search
-The current directory and all parent directories are searched for `djobber-config.yml` files.
+The current directory and all parent directories are searched for `jobber-config.yml` files.
 Settings found in more deeply nested directories override those found higher in the directory hierarchy.
-Additionally, `~/.config/djobber/djobber-config.yml` is read (if it exists) as the lowest priority.
+Additionally, `~/.config/jobber/jobber-config.yml` is read (if it exists) as the lowest priority.
 
 ## <a name="NamedConfigurations"></a> Named Configurations
 Named configurations are defined under the `configs` key.
@@ -212,7 +209,7 @@ configs:
 This settings file defaults to 'develop' mode with the tensorboard port mapped, so simply typing:
 
 ```sh
-djobber run
+jobber run
 ```
 
 starts Docker interactively and launches a bash shell.
@@ -222,8 +219,8 @@ No result image is produced (`result-image: none`).
 Once satisfied with the state of the code, the user just types `^D` to exit back to the host and then builds and runs in "debug" mode:
 
 ```sh
-djobber build
-djobber -c debug run
+jobber build
+jobber -c debug run
 ``` 
 
 This will produce a result image if no errors occurred (`result-image: success`).
