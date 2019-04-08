@@ -1,0 +1,10 @@
+# Build:
+#   jobber build -f Dockerfile_data -t mnist-data 
+
+FROM tensorflow/tensorflow:latest-gpu-py3
+
+WORKDIR /work
+RUN mkdir /data
+COPY mnist_data.py .
+RUN python mnist_data.py
+CMD echo "nothing to do"

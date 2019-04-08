@@ -1,0 +1,38 @@
+# 	Small image containing jobber command
+#	Import this image if you need to use the jobber command from inside Docker
+#
+#	Example
+#		FROM jobber:latest-py35 AS base
+#		FROM tensorflow/tensorflow:latest-gpu-py3
+#
+#		COPY --from=base /usr/local /usr/local/
+# 		# Required for click library (used by the jobber CLI)
+#		ENV LC_ALL=C.UTF-8
+#		ENV LANG=C.UTF-8
+#
+#	Build
+# 	cd to this directory:
+#   	docker build -t jobber:latest-py35 -f Dockerfile_py35 --force-rm ..
+
+FROM ubuntu
+
+# 'ubuntu' doesn't have apt-add-repository (its huge and requires python3.6) - add deadsnakes manually
+COPY base_image/deadsnakes-ubuntu-ppa-bionic.list /etc/apt/sources.list.d/
+COPY base_image/deadsnakes_ubuntu_ppa.gpg /etc/apt/trusted.gpg.d/
+
+RUN apt-get update
+RUN apt-get install -y curl python3.5
+RUN ln /usr/bin/python3.5 /usr/bin/python
+RUN curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+RUN python /tmp/get-pip.py
+
+# Add other default packages here
+RUN apt-get install -y git
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
+WORKDIR /jobber
+COPY setup.py .
+COPY src /jobber/src/
+RUN pip install .

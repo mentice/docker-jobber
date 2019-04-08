@@ -1,0 +1,7 @@
+Pipfile
+Pipfile.lock
+*.egg-info
+.vscode/
+build/
+dist/
+temp/

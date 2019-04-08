@@ -1,0 +1,12 @@
+# Build:
+#   jobber build -f Dockerfile_train       # Image name defaults to cwd (mnist)
+# Run:
+#   jobber run -i mnist-data:latest mnist
+
+FROM tensorflow/tensorflow:latest-gpu-py3
+# FROM tensorflow/tensorflow:latest-py3
+
+WORKDIR /work
+COPY mnist.py .
+
+CMD python mnist.py

@@ -1,0 +1,2 @@
+# Don't build a result image 
+result-image: none
