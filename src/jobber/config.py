@@ -32,7 +32,7 @@ merge_append_strat = jsonmerge.Merger(append_schema)
 def merge_config_file(config, path):
 	if os.path.isfile(path):
 		with open(path, 'r') as inf:
-			dict = yaml.load(inf)
+			dict = yaml.load(inf, Loader=yaml.FullLoader)
 			if dict == None: dict = {}
 			config = jsonmerge.merge(config, dict)	# Note: using default merge strategy here
 	return config
