@@ -11,3 +11,8 @@ You'll need [Docker](www.docker.com/get-started) of course, then install the `jo
 ```
 pip install docker-jobber
 ```
+
+## Version History
+
+#### 0.3.6 (2019-04-09)
+* Initial release

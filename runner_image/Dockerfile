@@ -2,7 +2,7 @@
 #   Manages launching and checkpointing Docker Jobber containers
 #
 #   From this directory (use version from src/__init__.py and setup.py)
-#       docker build --force-rm -t mentice/jobber-runner -t mentice/jobber-runner:0.3.0 -f Dockerfile ..
+#       docker build --force-rm -t mentice/jobber-runner -t mentice/jobber-runner:0.3.6 -f Dockerfile ..
 #
 #	Push to docker.io
 #		docker push mentice/jobber-runner
@@ -54,7 +54,7 @@ RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cl
 	 gcloud --version
 
 WORKDIR /tmp
-COPY runner_image/requirements.txt .
+COPY runner_image/requirements.txt ./
 
 # RUN pip install -r requirements.txt
 RUN pip3 install -r requirements.txt
@@ -63,11 +63,11 @@ ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
 
 WORKDIR /jobber
-COPY setup.py .
+COPY setup.py DESCRIPTION.md ./
 COPY src /jobber/src/
 # RUN pip install .
 RUN pip3 install .
 
 WORKDIR /runner
-COPY runner_image/runner.py .
+COPY runner_image/runner.py ./
 ENTRYPOINT ["python3", "runner.py"]
