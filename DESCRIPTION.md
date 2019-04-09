@@ -16,3 +16,6 @@ pip install docker-jobber
 
 #### 0.3.6 (2019-04-09)
 * Initial release
+
+#### 0.3.7 (2019-04-09)
+* Fix 

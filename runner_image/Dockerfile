@@ -2,7 +2,7 @@
 #   Manages launching and checkpointing Docker Jobber containers
 #
 #   From this directory (use version from src/__init__.py and setup.py)
-#       docker build --force-rm -t mentice/jobber-runner -t mentice/jobber-runner:0.3.6 -f Dockerfile ..
+#       docker build --force-rm -t mentice/jobber-runner -t mentice/jobber-runner:0.3.7 -f Dockerfile ..
 #
 #	Push to docker.io
 #		docker push mentice/jobber-runner
