@@ -14,6 +14,9 @@ pip install docker-jobber
 
 ## Version History
 
+#### 0.3.8 (2019-04-09)
+* Really fix PyYAML security hole
+
 #### 0.3.7 (2019-04-09)
 * Fix PyYAML security hole
 

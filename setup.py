@@ -12,7 +12,7 @@ with open('DESCRIPTION.md', 'r') as inf:
 
 setup(
 	name = 'docker-jobber',
-	version='0.3.7',		# NOTE Keep synced with __version__ in jobber/__init__.py
+	version='0.3.8',		# NOTE Keep synced with __version__ in jobber/__init__.py
 	author="Eric Parker",
 	author_email="eric.parker@mentice.com",
 	description="A command line interface (CLI) application for managing machine learning workflows using Docker",
@@ -28,7 +28,7 @@ setup(
 	packages=find_packages('src'),
 	package_dir={'':'src'},
 	include_package_data=True,
-	install_requires=['PyYAML', 'async-timeout', 'jsonmerge', 'click', 'docker'],
+	install_requires=['PyYAML>=4.2b1', 'async-timeout>=3.0.0', 'jsonmerge>=1.5.1', 'click>=6.7', 'docker>=3.4.1'],
 	entry_points = {
 		'console_scripts': [
 			'jobber=cli.cli:cli',
