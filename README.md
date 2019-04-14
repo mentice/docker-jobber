@@ -49,13 +49,13 @@ And just like for a scientist, reproducibility and data tracking are the keys to
 # Model
 The unifying technology behind Docker Jobber is the Docker *image*.
 A Docker image represents a snapshot of the Linux file system running in a virtual machine.
-Docker images are stored in Docker *registries* using an efficient layered approach that reduces both total storage size as well as transfer times when pushing or pulling images (in the Docker vernacular, images stored in a registry are called *repositories*).
+Docker images are stored in Docker *registries* using an efficient layered approach that reduces both total storage size as well as transfer times when pushing or pulling images (in the Docker vernacular, images stored in a registry are known as *repositories*).
 
 In Docker Jobber, both code and data reside in Docker images.
 Code and data may be stored together in a single image for simple cases, but separate *data images* may be used to support versioning or more complex data generation scenarios.
-Data images specified as input are automatically mounted as Docker volumes when a code image is executed.
-Any number of input data images may be provided, but each must specify a unique mount point (`/data` by default). 
-After the job completes (either successfully or unsuccessfully), a snapshot of the filesystem is saved to a *result image* (by default using a tag with '`latest-run`' appended).
+Data images specified as *inputs* are automatically mounted as Docker volumes when a code image is executed.
+Any number of input data images may be provided, but each must be associated with a unique mount point (`/data` by default). 
+After the job completes (either successfully or unsuccessfully), a snapshot of the filesystem is saved to a *result image* (with a tag formed from the base name of the image with `latest-run` appended).
 A log file of the job's execution is also written to the image.
 The log file can be useful when trying to determine what went wrong with a job (especially for remote jobs).
 Additional meta data in the form of Docker LABELS are written linking the result image to the code and data images from which it was created.
@@ -94,12 +94,12 @@ jobber [GLOBAL-OPTIONS] [build|run] [COMMAND-OPTIONS] [ARG]
 |--version || Print version and exit
 |-v, --verbose || Print extra information during execution of the command |
 |-H, --host *host* || Docker host to connect to |
-|-r, --reg *registry* || Default registry. Images are automatically pushed. |
+|-r, --reg *registry* || Default registry specification. Images are automatically pushed. |
 |-c, --config *config* |Y| Apply a named config (see the [Configuration](#ConfigurationFiles) section).
 
 The 'default' configuration from the config file (if found) is used if none are specified on the command line.
 
-Images are automatically pulled from or pushed to the default registry.
+Images without a repository path (i.e. registry url and/or namespace spec.) are automatically pulled from or pushed to the default registry.
 
 #### Build Command
 ```
@@ -138,19 +138,19 @@ Run a docker image and create a result image from a snapshot of the filesystem a
 The current directory name will be used as the name of the image to run if not specified.
 Any additional arguments appearing after the image name are passed as the docker CMD.
 `jobber` adds two tags to the result image name: 'latest-run', and a UTC timestamp with format 'YYYYMMDD_HHMMSS'.
-Meta-data in the form of Docker LABELS are also written to the result image:
+Meta-data in the form of Docker LABELS are also written to the result image as listed in the following table:
 
 | label | description |
 |--|--|
 |jobber.version| The version of Docker Jobber that created the image |
-|jobber.parent| The sha256 id of the image that was run |
-|jobber.out| The default *src* directory for when image is used as an input (see the `-o` option below)
+|jobber.parent| The sha256 id of the image that was executed |
+|jobber.out| The default *src* directory for when the image is used as an input (see the `-o` option below)
 |jobber.inputs| Comma separated list of input image vol-specs. A vol-spec is a string with format: "*image-id*:*src-directory*:ro".
 
 The out (`-o`) option specifies the default *src* directory when the result image is used as an input image on a later run (default is `/data`).
 
 The in (`-i`) option specifies one or more input images to use as data sources for the current run.
-Source directories from the input data images are copied (if needed) to scratch docker volumes and mounted on the running image's file system at corresponding destination directories.
+Source directories from the input data images are copied (as needed) to scratch docker volumes and mounted in the running image's file system at their corresponding destination directories.
 
 *in-spec* has the following format:
 ```
@@ -161,9 +161,17 @@ Both the src and dest portions are optional.
 The *out* directory from the input image will be used as the SRC-PATH if not specified (defaults to `/data`).
 The DEST-PATH also defaults to `/data`.
 You will need to specify a unique dest directory for each input image if multiple input images are used.
-A Docker volume is created if one doesn't already exists for a given input image.
+A Docker volume is created if one doesn't already exist for a given input image.
 This may lead to excessive disk usage if many variants of input images are built.
 Use the various `docker volume` commands to view and clean up unused volumes.
+
+#### Example:
+```
+jobber run -i mnist-data,src=/data,dest=/digits -o /digit-images mnist
+```
+This example runs the `mnist` code image with `mnist-data` mounted as an input image.
+The `/data` directory from `mnist-data` is mounted as `/digits` during the run.
+The result image (`mnist:latest-run`) created after the run specifies `/digit-images` as the default mount point for when the result image is used as input to some other run.
 
 
 # <a name="ConfigurationFiles"></a> Configuration Files
