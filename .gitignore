@@ -5,3 +5,4 @@ Pipfile.lock
 build/
 dist/
 temp/
+**/__pycache__

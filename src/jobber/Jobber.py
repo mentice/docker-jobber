@@ -49,60 +49,89 @@ def strip_sha256(id):
 	else:
 		return id
 
-def parse_tag(tag):
-	"""Parse a docker tag into a path, name, and tag
+def parse_image_url(url):
+	"""Parse a docker image url
 
-	Docker tags may specify a registry host, port and path, a repository name, and a tag
-	Returns: (path, name, tag)
-		path will end with '/', or equal '' if there is no path
-		tag may be ''
-	Examples:
+	Docker tags may specify a registry, path, name, tag and/or a digest
+	(See grammar at https://stackoverflow.com/questions/37861791/how-are-docker-image-names-parsed)
+	Returns: (registry, path, name, tag, digest) 
+	Examples (missing keys are '')
 		example.com:5000/data/mnist-data:latest
-			path: 'example.com:5000/data/'
-			name: 'mnist-data'
-			tag:  'latest'
+			registry: 	'example.com:5000'
+			path: 		'data'
+			name: 		'mnist-data'
+			tag:  		'latest'
 		hello
-			path: ''
-			name: 'hello'
-			tag:  ''
+			name: 		'hello'
 	"""
-	paths = tag.split('/')
+	paths = url.split('/')
+	if len(paths) == 1 or '.' not in paths[0] and ':' not in paths[0] and paths[0] != 'localhost':
+		registry = ''
+	else:
+		registry = paths[0]
+		paths = paths[1:]
+
 	path, name = '/'.join(paths[:-1]), paths[-1]
-	if path:
-		path = path + '/'
-	names = name.split(':')
-	if len(names) == 1:
-		name, tag = names[0], ''
-	elif len(names) == 2:
-		name, tag = names
+	ats = name.split('@')
+
+	if len(ats) == 1:
+		name, digest = ats[0], ''
+		colons = name.split(':')
+		if len(colons) == 1:
+			name, tag = colons[0], ''
+		elif len(colons) == 2:
+			name, tag = colons
+		else:
+			raise ValueError("{0}: bad tag".format(tag))
+	elif len(ats) == 2:
+		name, digest = ats
+		colons = name.split(':')
+		if len(colons) == 1:
+			name, tag = colons[0], ''
+		elif len(colons) == 2:
+			name, tag = colons
+		else:
+			raise ValueError("{0}: bad tag".format(tag))
 	else:
 		raise ValueError("{0}: bad tag".format(tag))
-	return path, name, tag
+	return registry, path, name, tag, digest
 
-def make_tag(path, name, tag):
+def make_image_url(reg, path, name='', tag='', digest='', empty_name_ok=False):
 	"""Construct a string from (path, name, tag)
 	
-	Essentially the opposite of parse_tag()"""
-	if path and path.endswith('/'):
-		path = path[:-1]
+	Essentially the opposite of parse_image_url()"""
+	if reg:
+		path = reg + '/' + path
+		if path.endswith('/'):
+			path = path[:-1]
+
+	if name:
+		if tag:
+			if digest:
+				image = name + ':' + tag + '@' + digest
+			else:
+				image = name + ':' + tag
+		else:
+			if digest:
+				image = name + '@' + digest
+			else:
+				image = name
+	else:
+		if not empty_name_ok and (path or tag or digest):
+			raise ValueError('Invalid image url: missing image name')
+		else:
+			image = ''
 
 	if path:
-		if name:
-			if tag:
-				return '{path}/{name}:{tag}'.format(path=path, name=name, tag=tag)
-			else:
-				return '{path}/{name}'.format(path=path, name=name)
-		else:
-			raise ValueError('Invalid tag: missing name')
+		return path + '/' + image
 	else:
-		if name:
-			if tag:
-				return '{name}:{tag}'.format(name=name, tag=tag)
-			else:
-				return name
-		else:
-			raise ValueError('Invalid tag: missing name')
+		return image
 
+def has_reg_or_path(url):
+	""" Return True if url explicitly references a registry or path
+	"""
+	reg, path, name, tag, digest = parse_image_url(url)
+	return make_image_url(reg, path, empty_name_ok=True) != ''
 
 def add_standard_tags(tags):
 	"""Add standard tag names to tags list for each registry path (if any)
@@ -114,8 +143,8 @@ def add_standard_tags(tags):
 	tags = list(tags)
 	paths = {}      # Set of tags for each unique "path/name" 
 	for tag in tags:
-		path, name, tag = parse_tag(tag)
-		path = path + name
+		reg, path, name, tag, digest = parse_image_url(tag)
+		path = make_image_url(reg, path, name)
 		if not path in paths:
 			paths[path] = set()
 		if tag:
@@ -148,11 +177,11 @@ def add_default_registry(default_registry, arg):
 	if not default_registry:
 		return arg
 	def prepend_registry(tag):
-		path, name, tag = parse_tag(tag)
-		if path:        # Nothing to add if it already has a path
-			return make_tag(path, name, tag)
+		reg, path, name, tag, digest = parse_image_url(tag)
+		if reg:        # Nothing to add if it already has a registry
+			return make_image_url(reg, path, name, tag)
 		else:
-			return make_tag(default_registry, name, tag)
+			return make_image_url(default_registry, path, name, tag)
 	if type(arg) is list:
 		return list(map(prepend_registry, arg))
 	else:
@@ -191,6 +220,7 @@ class Jobber(object):
 		"""config: a dict containing config options
 		"""
 		self.config = config
+		self.credentials = jobber.Credentials(self)
 		self.docker_client = docker.DockerClient(base_url=self._get_host())
 		self._set_run_state(None)
 		if os.name == 'nt':     # Windows
@@ -207,7 +237,7 @@ class Jobber(object):
 			host = self._get_host(option=True)
 			
 			tags = add_standard_tags(tags)
-			tags = add_default_registry(self.config['registry'], tags)
+			tags = add_default_registry(self.config['default-registry'], tags)
 
 			if dockerfile == None:
 				dockerfile = 'Dockerfile'
@@ -229,9 +259,12 @@ class Jobber(object):
 			if config['out']:
 				validate_dir_name(config['out'])
 			jobber_runner = "mentice/jobber-runner:{version}".format(version=jobber.__version__)
+			#jobber_runner = "jobber-runner"
 			config_b64 = codecs.encode(pickle.dumps(config), "base64").decode()
 			cmd = 'docker {host} run -it --rm --env JOBBER_CONFIG="{config}" -v /var/run/docker.sock:/var/run/docker.sock {jobber_runner} {image_name}'.format(host=host, config=config_b64, image_name=image_name, jobber_runner=jobber_runner)
-			await self._exec(cmd, echo=True)
+			if self.verbose:
+				print('docker run {jobber_runner} {image_name}'.format(jobber_runner=jobber_runner, image_name=image_name))
+			await self._exec(cmd, verbose=False, echo=True)
 			return 0    # Return code. _run() raises RunError if return code not 0.
 		return self._run_loop(self._try, code, 'Execution failed', print_log=False)
 
@@ -261,15 +294,26 @@ class Jobber(object):
 	async def _get_image(self, image_name, pull=False):
 		"""Get Image object from an image name
 		"""
-		path, name, tag = parse_tag(image_name)
-		if pull and path:
+		reg, path, name, tag, digest = parse_image_url(image_name)
+		if pull and has_reg_or_path(image_name):
 			return await self._pull(image_name)
 		else:
-			return self.docker_client.images.get(image_name)
+			async def code():
+				return self.docker_client.images.get(image_name)
+			return await self._try(code, 'Unable to find image', error_code=None)
+
+	async def _login(self, image_name):
+		reg, path, name, tag, digest = parse_image_url(image_name)
+		if reg:
+			return await self.credentials.login(reg)
+		return 0
 
 	async def _pull(self, image_name):
 		"""Attempt to pull an image
 		"""
+		if await self._login(image_name):
+			return None
+
 		async def code():
 			await self._exec('docker pull {0}'.format(image_name))
 			return await self._get_image(image_name)
@@ -278,6 +322,9 @@ class Jobber(object):
 	async def _push(self, image_name, host=''):
 		"""Attempt to push an image
 		"""
+		if await self._login(image_name):
+			return 1
+
 		async def code():
 			await self._exec('docker {host} push {0}'.format(image_name, host=host))
 			if not self.verbose:
@@ -288,41 +335,29 @@ class Jobber(object):
 	async def _push_tags(self, tags, host=''):
 		"""Push tags with registry specs
 		"""
-		for tag in tags:
-			path, name, tag = parse_tag(tag)
-			if path and tag:
-				if await self._push(make_tag(path, name, tag), host):
+		for url in tags:
+			reg, path, name, tag, digest = parse_image_url(url)
+			if has_reg_or_path(url) and tag:
+				if await self._push(make_image_url(reg, path, name, tag), host):
 					return 1
 		return 0
 
 	async def _launch(self, image_name):
-		image_name = add_default_registry(self.config['registry'], image_name)
+		image_name = add_default_registry(self.config['default-registry'], image_name)
 
 		config = self.config
 		inputs = config['inputs']
 		out = config['out']
 
-		# Login to google cloud if any image or volume references grc.io
-		gcr_io = image_name.startswith("gcr.io/")
-		for vol in inputs:
-			if vol.startswith("gcr.io/"):
-				gcr_io = True
-		if out and out.startswith("gcr.io/"):
-			gcr_io = True
-		if gcr_io:
-			await self._exec('cat gcr_key.json | docker login -u _json_key --password-stdin https://gcr.io')
-
 		image = await self._get_image(image_name, pull=True)
 		if not image:
-			if not self.verbose:
-				print('Image not found')
 			return 1
 
 		image_id = strip_sha256(image.id)
 
 		# Use image_name as base name for generating tags for the result image after a successful run
-		path, name, _ = parse_tag(image_name)
-		base_name = path + name
+		reg, path, name, tag, digest = parse_image_url(image_name)
+		base_name = make_image_url(reg, path, name)
 		if is_sha256(base_name):
 			base_name = None
 
@@ -361,7 +396,7 @@ class Jobber(object):
 			cmds[-1].append(image_id)
 
 			# CMD override
-			if 'cmd' in config:
+			if 'cmd' in config and config['cmd']:
 				cmds[-1] += config['cmd']
 
 			self._set_run_state('starting')
@@ -434,7 +469,7 @@ class Jobber(object):
 					for tag in tags[1:]:
 						await self._exec('docker tag {0} {tag}'.format(strip_sha256(first_line(log)), tag=tag))
 
-					if path:        # Push to registries
+					if has_reg_or_path(image_name):        # Push to registries
 						for tag in tags:
 							if await self._push('{tag}'.format(tag=tag)):
 								return_code = 1
@@ -505,7 +540,7 @@ class Jobber(object):
 			else:
 				raise ValueError('Invalid input volume format: "{0}"'.format(vol))
 
-			image_name = add_default_registry(self.config['registry'], image_name)
+			image_name = add_default_registry(self.config['default-registry'], image_name)
 			image = await self._get_image(image_name, pull=True)
 			if not image:
 				raise ValueError("{0}: Can't find input image".format(image_name))
@@ -633,5 +668,5 @@ class Jobber(object):
 			return error_code
 		except Exception as e:
 			if mesg:
-				print('{mesg}: {type} {e}'.format(mesg=mesg, type=type(e), e=e))
+				print('{mesg}: {e}'.format(mesg=mesg, e=e))
 			return error_code

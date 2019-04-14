@@ -35,7 +35,7 @@ def cli(ctx, version, verbose, host, reg, configs):
 	if host:
 		config = jsonmerge.merge(config, {'host' : host})
 	if reg:
-		config = jsonmerge.merge(config, {'registry' : reg})
+		config = jsonmerge.merge(config, {'default-registry' : reg})
 	jobber = dj.Jobber(config)
 
 @cli.command()

@@ -14,6 +14,12 @@ pip install docker-jobber
 
 ## Version History
 
+#### 0.3.9 (2019-04-09)
+* Credentials
+* Merge all config files on directory path
+* Fixed: successful build pushes to defined registries
+* Default registry configuration name changed to 'default-registry'
+
 #### 0.3.8 (2019-04-09)
 * Really fix PyYAML security hole
 

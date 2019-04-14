@@ -12,6 +12,9 @@ Docker Jobber (`jobber`) is a command line interface (CLI) application for manag
 * [Usage](#Usage)
 * [Command Line Arguments](#CommandLineArguments)
 * [Configuration Files](#ConfigurationFiles)
+    * [Directory Search](#ConfigurationDirectorySearch)
+    * [Credentials](#ConfigurationCredentials)
+    * [Named Configurations](#NamedConfigurations)
 
 
 # Introduction
@@ -177,14 +180,15 @@ The result image (`mnist:latest-run`) created after the run specifies `/digit-im
 # <a name="ConfigurationFiles"></a> Configuration Files
 Docker Jobber is configured using a flexible architecture based on yml files with the name `jobber-config.yml` (see [example](#example) below).
 
-## Settings
+## <a name="ConfigurationSettings"></a> Settings
 Settings from configuration files define default values for unspecified command line options and internal settings.
 
 |name|value|description|
 |--|--|--|
 |verbose| [True or False] | Sets the `-v` flag
 |host| *host URL*| Docker host to connect to 
-|registry| *registry URL*| Default registry
+|default-registry| *registry URL*| Default registry
+|credentials| *credential specs.* | Login credentials (see [below](#Credentials))
 |runtime|[runc \| nvidia] | Docker runtime environment
 |inputs| list of *in-spec*| Input data images (mounted read-only)
 |out| *src-dir* | Default src data directory
@@ -194,58 +198,183 @@ Settings from configuration files define default values for unspecified command 
 |Xdocker|*docker-args*| Pass *docker-args* to the docker command
 |configs| list of *configuration names*| Define named configurations (see [below](#NamedConfigurations))
 
-## Directory Search
-Configuration settings are read from `~/.config/jobber/jobber-config.yml` if it exists.
-Additionally, the current directory and all parent directories are searched for a `jobber-config.yml` file when executing a jobber command. Settings read from the file (if found) override those from `~/.config/jobber/jobber-config.yml` except for the `Xdocker` and `inputs` settings which are appended.
+## <a name="ConfigurationDirectorySearch"></a> Directory Search
+Configuration settings are read from the `~/.config/jobber/jobber-config.yml` if it exists.
+Additionally, the entire path up to the root is searched starting from the current directory for additional `jobber-config.yml` files when a jobber command is executed.
+Settings found in more deeply nested config files override those from higher up in the search path (except for `credentials`, which are concatenated).
 
+## <a name="ConfigurationCredentials"></a> Credentials
+A list of credentials for remote Docker registries may be specified under the `credentials` setting.
+Credentials are automatically provided before `push` or `pull` operations with remote registries.
+Support for the following credentialing mechanisms are currently supported (more to come):
+
+| type | description |
+| -- | -- |
+| login | Docker registry login using user name and password
+
+> Note: Google Cloud Platform provides for login authentication using a [json file](https://cloud.google.com/container-registry/docs/advanced-authentication#json_key_file).
+Use the `password-file` key as described next.
+
+
+Docker login requires a user name and password.
+
+| key | description |
+| -- | -- |
+| registry | Url of remote registry
+| user | user name
+| password | password (stored in the clear)
+| password-file| The name of a file containing the password
+
+#### Example:
+```YML
+credentials:
+  - registry: "localhost:5000"
+    user: me
+    password: in-the-clear
+  - registry: gcr.io
+    user: _json_key
+    password-file: ~/certs/gcr_key.json
+  ```
 
 ## <a name="NamedConfigurations"></a> Named Configurations
 
 A *named configuration* is a key/value pair in which the key is a configuration name and the value is a list of other configuration names, or a dictionary of setting-name/value pairs.
 Named configurations are defined under the `configs` key in the yml file.
-Configuration names are activated on the command line using the `-c` [option](#GlobalOptions).
-The configuration named "default" is used (if it exists) if the user doesn't specify any configurations.
+Configuration names are activated on the command line using the `-c` [option](#GlobalOptions), or using the configuration named `default` (if it exists).
+
+Settings defined under a named configuration override values that are not part of a configuration (i.e. outside of the `configs` key).
+Also, `Xdocker` and `inputs` values are concatenated in addition to `credentials` when processing named configurations.
 
 A named configuration may be defined in terms of other named configurations. 
-Encountering a configuration name as part of a definition activates that configuration as if it had also occurred on the command line.
-This results in a surprisingly flexible and easy to use system making it easy to switch between different development and runtime environments.
+Encountering a list of configuration names as as part of a definition activates those configurations as if they had been provided on the command line.
+This results in a surprisingly flexible and easy to use system making it simple to switch between different development and runtime tasks.
 
 #### Example:
-```YML
-inputs:
-  - mnist-data
+
+The following is representative of a complex real-world software project incorporating machine learning.
+
+As the lead ML engineer on the project, you are responsible for developing, testing, and deploying ML as a critical component of the product.
+Your duties include quantifying and reporting on ML progress, as well as performing regression analysis when problems arise in the field with previously deployed versions.
+You alternate between algorithm development and analysis and product integration and deployment.
+You also must manage and track work performed by contract ML developers and researchers working remotely.
+Docker Jobber makes it possible to succeed in this type of environment.
+
+We'll take a look at how you might configure Docker Jobber for use during development of ML unit tests.
+Assume that the project has the following directory structure:
+```
+myproject/
+  jobber-config.yml
+  ...
+  tests/
+    jobber-config.yml
+    DockerFile
+    tests.py
+    ...
+```
+
+
+In your home directory, define a set named configurations for common tasks using a jobber config file `/home/user/.config/jobber/jobber-config.yml`:
+``` YML
+credentials:
+  - registry: "localhost:5000"
+    user: me
+    password: in-the-clear
 configs:
-  default:
-    - develop
-    - tensorboard
   tensorboard:
     Xdocker: -p 6006:6006
   develop:
+    # Xdocker: -v /home/user/myproject/<dir>:/work
     result-image: none
     cmd: bash
-    Xdocker: -v /home/user/mnist:/work
   debug:
     result-image: success
   release:
     result-image: always
 ```
-This settings file defaults to 'develop' mode with the tensorboard port mapped, so simply typing:
 
-```sh
-jobber run
+You make use of [Tensorboard](https://github.com/tensorflow/tensorboard) to track the learning progress during training (the `tensorboard` configuration exposes port 6006).
+
+The `develop` configuration is intended for use while you are writing code.
+It disables creation of result images (no need to clutter the registry with hundreds of failed runs), and overrides the Docker CMD to open a bash prompt.
+The intent is to map your source code from the host machine into the Docker container so you may use an external editor without having to repeatedly rebuild code images (an example of how you would do that from a subdirectory is shown in the commented line).
+You can modify, debug, and execute code multiple times from inside the container.
+Once you're happy with the results, just type `^D` to exit back to the host where you can then build and run in `debug` or `release` mode.
+We'll see this in action shortly.
+
+The config file in the project root (`myproject/jobber-config.yml`) provides credentials for the project repository on Google Cloud Platform.
+It also activates the `develop` and `tensorboard` configurations by default:
+```YML
+credentials:
+  - registry: gcr.io/myproject
+    user: _json_key
+    password-file: ~/certs/myproject_gcr_key.json
+configs:
+  default:
+     - develop
+     - tensorboard
 ```
 
-starts Docker interactively and launches a bash shell.
-The user's source directory on the host is mapped as `/work` in the container so file edits are reflected immediately.
-The code may be modified, debugged, and executed multiple times during the run.
-No result image is produced (`result-image: none`).
-Once satisfied with the state of the code, the user just types `^D` to exit back to the host and then builds and runs in "debug" mode:
 
-```sh
-jobber build
-jobber -c debug run
-``` 
+Here's the config file in the unit testing directory
+`myproject/tests/jobber-config.yml`:
 
+```YML
+inputs:
+  - test-data
+configs:
+  develop:
+    Xdocker: -v /home/user/myproject/tests:/work 
+  debug:
+    cmd: python -m unittest
+  release:
+    cmd: echo "Unit tests disabled in release mode"
+```
+
+You've provided the source directory mapping for the `develop` configuration as outlined above.
+An input data image is also mapped (using its default src directory).
+The data image will be available in all configurations.
+Building the image is simple:
+```
+$ cd tests
+$ jobber build
+```
+
+Use `develop` mode to work on the code:
+```
+$ jobber run
+root@c552bc46c03c:/work# python -m unittest 
+F
+======================================================================
+FAIL: test_learning_rate (tests.MyTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/work/tests.py", line 5, in test_learning_rate
+    self.assertEqual(1, 0)
+AssertionError: 1 != 0
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (failures=1)
+root@c552bc46c03c:/work#
+```
+Notice that it wasn't necessary to specify `-c develop` on the command line since the `develop` configuration is active by default in the project level config file.
+Continue to edit and run the code until happy.
+No result images are produced during the development process (`result-image: none`).
+Finally, exit and run in debug mode
+
+```
+root@c552bc46c03c:/work# exit
+$ jobber build
+$ jobber run -c debug
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+```
 This will produce a result image if no errors occurred (`result-image: success`).
 
 The combination of named configurations and nested configuration files provides an unobtrusive and productive development environment while still retaining strict reproducibility and data provenance.
+
+

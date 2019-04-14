@@ -8,17 +8,32 @@ import yaml
 
 default_config = {
 	'verbose' : False,
-	'host' : '',
-	'registry' : '',
+	'host' : '',			# Remote host to run command on
+	'default-registry' : '',
 	'runtime' : 'nvidia',	# Docker runtime
 	'inputs' : [],
 	'out' : None,
+	'cmd' : None,			# CMD override
 	'timeout': None,		# In seconds (None means wait indefinitely)
 	'result-image': 'always' # Create a latest-result image based on container exit status: 'success', 'always', 'none' -or- 'never'
 }
 
-append_schema = {
+# Merge schema when merging jobber-config.yml files
+config_file_schema = {
 	'properties': {
+		'credentials': {
+			'mergeStrategy': 'append'
+		}
+	}
+}
+config_file_strat = jsonmerge.Merger(config_file_schema)
+
+# Merge schema when merging named configs
+configs_schema = {
+	'properties': {
+		'credentials': {
+			'mergeStrategy': 'append'
+		},
 		'inputs': {
 			'mergeStrategy': 'append'
 		},
@@ -27,48 +42,53 @@ append_schema = {
 		}
 	}
 }
-merge_append_strat = jsonmerge.Merger(append_schema)
+configs_strat = jsonmerge.Merger(configs_schema)
 
 def merge_config_file(config, path):
+	path = os.path.expanduser(path)
 	if os.path.isfile(path):
 		with open(path, 'r') as inf:
 			dict = yaml.safe_load(inf)
 			if dict == None: dict = {}
-			config = jsonmerge.merge(config, dict)	# Note: using default merge strategy here
+			config = config_file_strat.merge(config, dict)	# Note: using default merge strategy here
 	return config
 
 def find_on_path(dir, filename):
 	"""Look for filename searching up through all directories on the path 'dir'.
 		
-	Returns the full path if the file exists, or False
+	Returns list of full paths where file exists in parent dirs starting with parent, or an empty list
 	"""
-
+	paths = []
 	for _ in range(20):
 		path = os.path.join(dir, filename)
-		# print('dir',dir, 'path', path)
 		if os.path.isfile(path):
-			return path
+			paths.append(path)
 		dir, _ = os.path.split(dir)
 		if dir == '/': break
-	return False
+	return reversed(paths)	# reverse so paths are ordered from root down to dir
 
 def get_config(config_names=['default']):
 	config = merge_config_file(default_config, '~/.config/jobber/jobber-config.yml')
-	config = merge_config_file(config, find_on_path(os.getcwd(), 'jobber-config.yml'))
+	paths = find_on_path(os.getcwd(), 'jobber-config.yml')
+	for path in paths:
+		config = merge_config_file(config, path)
 
-	# Translate items if necessary (modifies the config dict in place)
-	def visit(dic):
+	def translate(dic):
 		for key, val in dic.items():
-			yield dic, key, val
-			if type(val) is dict:
-				for dic2, key2, val2 in visit(val):
-					yield dic2, key2, val2
-	for dic, key, val in visit(config):
-		if key in ('Xdocker', 'cmd') and type(val) is str:
-			dic[key] = shlex.split(val)
-		if key in ('cmd', 'timeout') and type(val) is str and val.lower() == 'none':
-			dic[key] = None
-	
+			if key in ('Xdocker', 'cmd') and type(val) is str:
+				dic[key] = shlex.split(val)
+			if key in ('cmd', 'timeout') and type(val) is str and val.lower() == 'none':
+				dic[key] = None
+			if key == 'credentials':
+				for val2 in val:	# val should be a list
+					for key3, val3 in list(val2.items()):	# val2 should be a dict
+						if key3 == 'password-file':
+							del val2[key3]
+							with open(os.path.expanduser(val3)) as inf:
+								val2['password'] = inf.read()	# Read entire contents of file
+	translate(config)
+
+	# Merge configurations
 	if 'configs' in config:
 		configs = config['configs']
 		config_names = list(config_names)		# make a copy
@@ -80,12 +100,14 @@ def get_config(config_names=['default']):
 						if nm not in config_names:
 							config_names.append(nm)
 				else:
-					config = merge_append_strat.merge(config, val)
-			else:
+					translate(val)
+					config = configs_strat.merge(config, val)
+			elif name != 'default':
 				print('warning: config not found: {0}'.format(name))
 		del config['configs']	# Remove 'configs' since they're used to populate the config dict itself
 
+	# print('config:')
 	# for k, v in config.items():
-	# 	print(f'{k:16} {v}')
+	# 	print(f'  {k:16} {v}')
 
 	return config

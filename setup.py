@@ -12,7 +12,7 @@ with open('DESCRIPTION.md', 'r') as inf:
 
 setup(
 	name = 'docker-jobber',
-	version='0.3.8',		# NOTE Keep synced with __version__ in jobber/__init__.py
+	version='0.3.9',		# NOTE Keep synced with __version__ in jobber/__init__.py
 	author="Eric Parker",
 	author_email="eric.parker@mentice.com",
 	description="A command line interface (CLI) application for managing machine learning workflows using Docker",
