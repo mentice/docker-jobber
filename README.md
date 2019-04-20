@@ -2,7 +2,7 @@ Docker Jobber
 ==============================
 > *Twas buildy in the softly woves did gen and gitter in the web...*
 
-Docker Jobber (`jobber`) is a command line interface (CLI) application for managing machine learning workflows using Docker.
+Docker Jobber (`jobber`) is a light-weight command line interface (CLI) application for managing machine learning workflows using Docker.
 
 ![workflow](./docs/images/workflow.png)
 
@@ -10,7 +10,9 @@ Docker Jobber (`jobber`) is a command line interface (CLI) application for manag
 * [Introduction](#Introduction)
 * [Installation](#Installation)
 * [Usage](#Usage)
-* [Command Line Arguments](#CommandLineArguments)
+    * [Command Line Arguments](#CommandLineArguments)
+    * [build command](#BuildCommand)
+    * [run command](#RunCommand)
 * [Configuration Files](#ConfigurationFiles)
     * [Directory Search](#ConfigurationDirectorySearch)
     * [Credentials](#ConfigurationCredentials)
@@ -62,10 +64,10 @@ After the job completes (either successfully or unsuccessfully), a snapshot of t
 A log file of the job's execution is also written to the image.
 The log file can be useful when trying to determine what went wrong with a job (especially for remote jobs).
 Additional meta data in the form of Docker LABELS are written linking the result image to the code and data images from which it was created.
-This provides the complete provenance for each job enabling reproducible results.
+This provides the complete provenance for each job, enabling reproducible results.
 
 # Installation
-You'll need [Docker](www.docker.com/get-started) of course, then install the `jobber` command using pip (Docker Jobber requires Python3):
+You'll need [Docker](www.docker.com/get-started) of course, then install the `jobber` command using pip (Docker Jobber requires [Python3](https://www.python.org/)):
 
 ```
 pip install docker-jobber
@@ -78,8 +80,8 @@ Using Docker Jobber is very similar to just using Docker by itself:
 * You build Docker images with the build command (e.g. `jobber build`)
 * You execute jobs with the run command (e.g. `jobber run`)
   
-> Note: `docker run` starts a container that will continue to exist on the Docker host even after the container exits, 
-`jobber run` instead snapshots the file system and then deletes the container at exit. 
+> Note: `docker run` by default starts a container that will continue to exist on the Docker host even after the container exits; 
+`jobber run`, instead, snapshots the file system and then deletes the container at exit. 
 The file system snapshot is saved as the *result image* for the run.
 The result image may be mounted as an input volume during a succeeding run.
 Arbitrarily complex data dependency chains may be built up in this way.
@@ -97,14 +99,14 @@ jobber [GLOBAL-OPTIONS] [build|run] [COMMAND-OPTIONS] [ARG]
 |--version || Print version and exit
 |-v, --verbose || Print extra information during execution of the command |
 |-H, --host *host* || Docker host to connect to |
-|-r, --reg *registry* || Default registry specification. Images are automatically pushed. |
-|-c, --config *config* |Y| Apply a named config (see the [Configuration](#ConfigurationFiles) section).
+|-r, --reg *registry/namespace* || Default registry with optional namespace path|
+|-c, --config *config* |Y| Apply a named config (see the [Configuration](#ConfigurationFiles) section)
 
 The 'default' configuration from the config file (if found) is used if none are specified on the command line.
 
-Images without a repository path (i.e. registry url and/or namespace spec.) are automatically pulled from or pushed to the default registry.
+Images without a registry url and/or namespace spec. (e.g. just an image name and tag) are automatically pulled from or pushed to the default registry/namespace (e.g. docker.io/myproject).
 
-#### Build Command
+#### <a name="BuildCommand"></a> Build Command
 ```
 jobber build [OPTIONS]
 ```
@@ -117,14 +119,15 @@ jobber build [OPTIONS]
 Build a Docker image from a Dockerfile.
 The current directory name will be used as the image name if no tags are specified.
 Tags consist of an *image-name* optionally followed by a colon (:) and a *tag-name*.
-`jobber` will add two default tags to the image name if a tag name isn't specified: 'latest', and a UTC timestamp with format 'YYYYMMDD_HHMMSS'. Meta-data in the form of Docker LABELS are also written to the image:
+`jobber` will add two default tags to the image name if a tag name isn't specified: 'latest', and a UTC timestamp with format 'YYYYMMDD_HHMMSS'. 
+Meta-data in the form of Docker LABELS are also written to the image:
 
 | label | description |
 |--|--|
 |jobber.version| The version of Docker Jobber that created the image |
 |jobber.build-tags| List of tags set for the image |
 
-#### Run Command
+#### <a name="RunCommand"></a> Run Command
 ```
 jobber run [OPTIONS] [IMAGE[:TAG]] [CMD] [ARGS...]
 ```
@@ -148,7 +151,8 @@ Meta-data in the form of Docker LABELS are also written to the result image as l
 |jobber.version| The version of Docker Jobber that created the image |
 |jobber.parent| The sha256 id of the image that was executed |
 |jobber.out| The default *src* directory for when the image is used as an input (see the `-o` option below)
-|jobber.inputs| Comma separated list of input image vol-specs. A vol-spec is a string with format: "*image-id*:*src-directory*:ro".
+|jobber.inputs| Comma separated list of input image vol-specs. 
+A vol-spec is a string with format: "*image-id*:*src-directory*:ro".
 
 The out (`-o`) option specifies the default *src* directory when the result image is used as an input image on a later run (default is `/data`).
 
@@ -168,7 +172,7 @@ A Docker volume is created if one doesn't already exist for a given input image.
 This may lead to excessive disk usage if many variants of input images are built.
 Use the various `docker volume` commands to view and clean up unused volumes.
 
-#### Example:
+#### <a name="RunExample"></a>Example:
 ```
 jobber run -i mnist-data,src=/data,dest=/digits -o /digit-images mnist
 ```
@@ -178,7 +182,7 @@ The result image (`mnist:latest-run`) created after the run specifies `/digit-im
 
 
 # <a name="ConfigurationFiles"></a> Configuration Files
-Docker Jobber is configured using a flexible architecture based on yml files with the name `jobber-config.yml` (see [example](#example) below).
+Docker Jobber is configured using a flexible architecture based on yml files with the name `jobber-config.yml` (see [example](#BigExample) below).
 
 ## <a name="ConfigurationSettings"></a> Settings
 Settings from configuration files define default values for unspecified command line options and internal settings.
@@ -187,8 +191,8 @@ Settings from configuration files define default values for unspecified command 
 |--|--|--|
 |verbose| [True or False] | Sets the `-v` flag
 |host| *host URL*| Docker host to connect to 
-|default-registry| *registry URL*| Default registry
-|credentials| *credential specs.* | Login credentials (see [below](#Credentials))
+|default-registry| *registry/namespace*| Default registry with optional namespace path (e.g. docker.io/myproject)
+|credentials| *credential specs.* | Login credentials (see [below](#ConfigurationCredentials))
 |runtime|[runc \| nvidia] | Docker runtime environment
 |inputs| list of *in-spec*| Input data images (mounted read-only)
 |out| *src-dir* | Default src data directory
@@ -225,7 +229,7 @@ Docker login requires a user name and password.
 | password | password (stored in the clear)
 | password-file| The name of a file containing the password
 
-#### Example:
+#### <a name="YMLExample"></a> Example:
 ```YML
 credentials:
   - registry: "localhost:5000"
@@ -249,7 +253,7 @@ A named configuration may be defined in terms of other named configurations.
 Encountering a list of configuration names as as part of a definition activates those configurations as if they had been provided on the command line.
 This results in a surprisingly flexible and easy to use system making it simple to switch between different development and runtime tasks.
 
-#### Example:
+#### <a name="BigExample"></a> Example:
 
 The following is representative of a complex real-world software project incorporating machine learning.
 
@@ -294,7 +298,7 @@ configs:
 
 You make use of [Tensorboard](https://github.com/tensorflow/tensorboard) to track the learning progress during training (the `tensorboard` configuration exposes port 6006).
 
-The `develop` configuration is intended for use while you are writing code.
+The `develop` configuration is intended for use while you are working on code.
 It disables creation of result images (no need to clutter the registry with hundreds of failed runs), and overrides the Docker CMD to open a bash prompt.
 The intent is to map your source code from the host machine into the Docker container so you may use an external editor without having to repeatedly rebuild code images (an example of how you would do that from a subdirectory is shown in the commented line).
 You can modify, debug, and execute code multiple times from inside the container.
